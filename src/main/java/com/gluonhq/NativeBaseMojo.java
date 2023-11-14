@@ -160,13 +160,10 @@ public abstract class NativeBaseMojo extends AbstractMojo {
         String mavenVersion = runtimeInformation.getMavenVersion();
         Version version = new Version(mavenVersion);
         if (version.compareTo(MAX_SUPPORTED_MAVEN_VERSION) > 0) {
-            throw new MojoExecutionException("Maven version " + mavenVersion + " is not currently supported by the GluonFX Maven Plugin.\n" +
-                    "Please downgrade your Maven version to " + MAX_SUPPORTED_MAVEN_VERSION + " and then try again.\n");
+            throw new MojoExecutionException("Maven version " + mavenVersion + " is not currently supported by the GluonFX Maven Plugin.\n" + "Please downgrade your Maven version to " + MAX_SUPPORTED_MAVEN_VERSION + " and then try again.\n");
         }
         if (getGraalvmHome().isEmpty()) {
-            throw new MojoExecutionException("GraalVM installation directory not found." +
-                    " Either set GRAALVM_HOME as an environment variable or" +
-                    " set graalvmHome in gluonfx-plugin configuration");
+            throw new MojoExecutionException("GraalVM installation directory not found." + " Either set GRAALVM_HOME as an environment variable or" + " set graalvmHome in gluonfx-plugin configuration");
         }
         outputDir = Path.of(project.getBuild().getDirectory(), Constants.GLUONFX_PATH);
         ProjectConfiguration substrateConfiguration = createSubstrateConfiguration();
@@ -215,8 +212,7 @@ public abstract class NativeBaseMojo extends AbstractMojo {
         clientConfig.setLinkerArgs(linkerArgs);
         clientConfig.setRuntimeArgs(runtimeArgs);
         clientConfig.setReflectionList(reflectionList);
-        clientConfig.setAppId(appIdentifier != null ? appIdentifier :
-                project.getGroupId() + "." + project.getArtifactId());
+        clientConfig.setAppId(appIdentifier != null ? appIdentifier : project.getGroupId() + "." + project.getArtifactId());
         clientConfig.setAppName(project.getName());
         clientConfig.setVerbose("true".equals(verbose));
         clientConfig.setUsePrismSW("true".equals(enableSWRendering));
@@ -235,10 +231,8 @@ public abstract class NativeBaseMojo extends AbstractMojo {
 
     private String getProjectClasspath() {
         List<File> classPath = getClasspathElements(project);
-        getLog().debug("classPath = " + classPath);
-        return classPath.stream()
-                .map(File::getAbsolutePath)
-                .collect(Collectors.joining(File.pathSeparator));
+        getLog().error("classPath = " + classPath);
+        return classPath.stream().map(File::getAbsolutePath).collect(Collectors.joining(File.pathSeparator));
     }
 
     private List<File> getClasspathElements(MavenProject project) {
@@ -250,7 +244,8 @@ public abstract class NativeBaseMojo extends AbstractMojo {
         MavenArtifactResolver.initRepositories(repositories);
 
         List<Artifact> attachDependencies = getAttachDependencies();
-        List<File> list = Stream.concat(project.getArtifacts().stream(), attachDependencies.stream())
+        List<File> list = Stream
+                .concat(project.getArtifacts().stream(), attachDependencies.stream())
                 .filter(d -> ALLOWED_DEPENDENCY_TYPES.stream().anyMatch(t -> t.equals(d.getType())))
                 .sorted((a1, a2) -> {
                     int compare = a1.compareTo(a2);
@@ -265,24 +260,26 @@ public abstract class NativeBaseMojo extends AbstractMojo {
         list.add(0, new File(project.getBuild().getOutputDirectory()));
 
         // include runtime dependencies
-        getRuntimeDependencies().stream()
-                .filter(d -> !list.contains(d))
-                .forEach(list::add);
+        getRuntimeDependencies().stream().filter(d -> !list.contains(d)).forEach(list::add);
 
         // remove provided dependencies
-        getProvidedDependencies().stream()
-                .filter(list::contains)
-                .forEach(list::remove);
+        getProvidedDependencies().stream().filter(list::contains).forEach(list::remove);
+
+        list.forEach(it -> getLog().error(it.toString()));
 
         // WEB
         if (Constants.PROFILE_WEB.equals(target)) {
-            project.getArtifacts().stream()
+            project.getArtifacts().forEach(System.out::println);
+            project
+                    .getArtifacts()
+                    .stream()
                     .filter(a -> "org.openjfx".equals(a.getGroupId()) && a.getClassifier() != null)
-                    .map(a -> new DefaultArtifact(a.getGroupId(), a.getArtifactId(),
-                            Constants.WEB_AOT_CLASSIFIER, "jar", Constants.DEFAULT_JAVAFX_JS_SDK_VERSION))
+                    .map(a -> new DefaultArtifact(a.getGroupId(), a.getArtifactId(), Constants.WEB_AOT_CLASSIFIER, "jar", Constants.DEFAULT_JAVAFX_JS_SDK_VERSION))
                     .flatMap(a -> {
-                        DependencyFilter exclusions = (node, parents) ->
-                                !node.getArtifact().getClassifier().equals(Constants.WEB_AOT_CLASSIFIER);
+                        DependencyFilter exclusions = (node, parents) -> !node
+                                .getArtifact()
+                                .getClassifier()
+                                .equals(Constants.WEB_AOT_CLASSIFIER);
                         Set<Artifact> resolve = MavenArtifactResolver.getInstance().resolve(a, exclusions);
                         if (resolve == null) {
                             return Stream.empty();
@@ -291,12 +288,13 @@ public abstract class NativeBaseMojo extends AbstractMojo {
                     })
                     .distinct()
                     .map(Artifact::getFile)
+                    .peek(i -> getLog().error("1: " + i))
                     .forEach(list::add);
 
-            WebTargetConfiguration.WEB_AOT_DEPENDENCIES.stream()
+            WebTargetConfiguration.WEB_AOT_DEPENDENCIES
+                    .stream()
                     .map(s -> s.split(":"))
-                    .map(a -> new DefaultArtifact(a[0], a[1],
-                            a.length == 4 ? a[3] : null, "jar", a[2]))
+                    .map(a -> new DefaultArtifact(a[0], a[1], a.length == 4 ? a[3] : null, "jar", a[2]))
                     .flatMap(a -> {
                         Set<Artifact> resolve = MavenArtifactResolver.getInstance().resolve(a);
                         if (resolve == null) {
@@ -306,6 +304,7 @@ public abstract class NativeBaseMojo extends AbstractMojo {
                     })
                     .distinct()
                     .map(Artifact::getFile)
+                    .peek(i -> getLog().error("2: " + i))
                     .forEach(list::add);
         }
         return list;
@@ -315,24 +314,22 @@ public abstract class NativeBaseMojo extends AbstractMojo {
         List<Dependency> dependencies = project.getDependencies();
 
         // include dependencies from project artifacts (transitive dependencies)
-        project.getArtifacts().stream()
-                .filter(a -> DEPENDENCY_GROUP.equals(a.getGroupId()))
-                .map(a -> {
-                    Dependency d = new Dependency();
-                    d.setGroupId(a.getGroupId());
-                    d.setArtifactId(a.getArtifactId());
-                    d.setVersion(a.getVersion());
-                    return d;
-                })
-                .forEach(dependencies::add);
+        project.getArtifacts().stream().filter(a -> DEPENDENCY_GROUP.equals(a.getGroupId())).map(a -> {
+            Dependency d = new Dependency();
+            d.setGroupId(a.getGroupId());
+            d.setArtifactId(a.getArtifactId());
+            d.setVersion(a.getVersion());
+            return d;
+        }).forEach(dependencies::add);
 
         Map<String, Artifact> attachMap = AttachArtifactResolver.findArtifactsForTarget(dependencies, target);
         if (attachList != null) {
-            return Stream.concat(attachList.stream(), Stream.of(UTIL_ARTIFACT))
-                .distinct()
-                .map(attachMap::get)
-                .filter(Objects::nonNull)
-                .collect(Collectors.toList());
+            return Stream
+                    .concat(attachList.stream(), Stream.of(UTIL_ARTIFACT))
+                    .distinct()
+                    .map(attachMap::get)
+                    .filter(Objects::nonNull)
+                    .collect(Collectors.toList());
         }
         return new ArrayList<>();
     }
@@ -349,11 +346,12 @@ public abstract class NativeBaseMojo extends AbstractMojo {
         if (scope == null || scope.isEmpty()) {
             return new ArrayList<>();
         }
-        return project.getDependencies().stream()
+        return project
+                .getDependencies()
+                .stream()
                 .filter(d -> ALLOWED_DEPENDENCY_TYPES.stream().anyMatch(t -> t.equals(d.getType())))
                 .filter(d -> scope.equals(d.getScope()))
-                .map(d -> new DefaultArtifact(d.getGroupId(), d.getArtifactId(),
-                        d.getClassifier(), d.getType(), d.getVersion()))
+                .map(d -> new DefaultArtifact(d.getGroupId(), d.getArtifactId(), d.getClassifier(), d.getType(), d.getVersion()))
                 .flatMap(a -> {
                     Set<Artifact> resolve = MavenArtifactResolver.getInstance().resolve(a);
                     if (resolve == null) {
@@ -367,7 +365,6 @@ public abstract class NativeBaseMojo extends AbstractMojo {
     }
 
     Optional<String> getGraalvmHome() {
-        return Optional.ofNullable(graalvmHome)
-                .or(() -> Optional.ofNullable(System.getenv("GRAALVM_HOME")));
+        return Optional.ofNullable(graalvmHome).or(() -> Optional.ofNullable(System.getenv("GRAALVM_HOME")));
     }
 }
